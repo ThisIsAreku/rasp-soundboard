@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>SoundBoard</title>
+	<link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.1.1/css/bootstrap.min.css" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+	<style type="text/css">
+	#wrapper{
+		padding-top: 20px;
+		text-align: center;
+	}
+	#contents button{
+		margin: 5px;
+	}
+	#controls .stopall{
+		padding-left: 120px;
+		padding-right: 120px;
+	}
+	#stats a.count{
+		font-weight: bold;
+	}
+	#stats .details{
+		float: left;
+		position: absolute;
+		display: none;
+	}
+	#stats .details.get{
+		display: block;
+	}
+	</style>
+</head>
+<body>
+<div id="stats">En ligne: <a class="count">1</a><ul class="details"></ul></div>
+<div id="wrapper" class="container">
+	<div id="controls">
+		<button class="btn btn-lg btn-info refresh">Actualiser</button>&nbsp;
+		<button class="btn btn-lg btn-danger stopall">Stop all</button>&nbsp;
+		<button class="btn btn-lg btn-info stats">Stats</button>&nbsp;
+	</div>
+	<div id="contents">
+	</div>
+</div>
+
+<script type="text/javascript" src="./socket.io/socket.io.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.1.1/js/bootstrap.min.js"></script>
+<script type="text/javascript">
+	var container = $('#contents');
+	var socket = io();
+	socket.on('getFiles', function (data){
+		console.log(data);
+		container.empty();
+		var folders = {};
+		for (var i in data) {
+			var name = rmExt(data[i]);
+			var ind = name.lastIndexOf('/');
+			var fname = name.substring(0, ind);
+			if(fname == '')
+				fname = '.';
+			name = name.substring(ind+1);
+			if(typeof(folders[fname]) == 'undefined'){
+				folders[fname] = $('<div />', {
+					'class': 'folder '+fname.replace(/ /g, '_')
+				}).append($('<h2>', {text: fname})).appendTo(container);
+			}
+			$('<button />', {
+				text: name,
+				'class': 'btn btn-lg btn-default '+i,
+				data: {
+					hash: i
+				}
+			}).appendTo(folders[fname]);
+		};
+	})
+	container.on('click', 'button', function (e){
+		var $this = $(this);
+		$this.blur()
+		socket.emit('playSound', {hash: $(this).data('hash')}, function (data) {
+			$this.addClass('active');
+			console.log("Start Sound: " + data.name);
+		});
+	})
+	$('#controls .stopall').click(function (e){
+		socket.emit('stopAll');
+		$('button', container).removeClass('active');
+	});
+	$('#controls .refresh').click(function (e){
+		socket.emit('Refresh');
+	});
+	$('#controls .stats').click(function (e){
+		socket.emit('PlayingStats', null, function (data){
+			console.log(data);
+		});
+	});
+	socket.on('endSound', function (data){
+		console.log("End Sound: " + data.name);
+		$('button.'+data.hash, container).removeClass('active');
+	});
+	socket.on('startSound', function (data){
+		console.log("Start Sound: " + data.name);
+		$('button.'+data.hash, container).addClass('active');
+	});
+	socket.on('PlayerStats', function (data){
+		$('#stats .count').text(data.count);
+		$('#stats .details').empty();
+		for(var hash in data.data){
+			$('#stats .details').append($('<li />', { text: data.data[hash], title: hash }));
+		}
+	});
+	$('#stats .count').click(function (e){
+		e.preventDefault();
+		$('#stats .details').toggleClass('get');
+	})
+
+	function rmExt(fileName){
+		return fileName.substring(0, fileName.lastIndexOf('.'));
+	}
+</script>
+</body>
+</html>
