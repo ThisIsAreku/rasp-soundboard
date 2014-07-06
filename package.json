@@ -1,0 +1,12 @@
+{
+  "name": "mumblesound",
+  "description": "Mumble soundboard",
+  "version": "0.0.5",
+  "private": true,
+  "dependencies": {
+    "wiring-pi": "*",
+    "express": "*",
+    "socket.io": "*",
+    "merge": "*"
+  }
+}

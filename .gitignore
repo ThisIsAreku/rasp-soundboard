@@ -1,3 +1,4 @@
 node_modules
 sounds/*
 +sounds/.gitkeep
+public/*Cache.json

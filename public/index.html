@@ -2,12 +2,14 @@
 <html>
 <head>
 	<title>SoundBoard</title>
-	<link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.1.1/css/bootstrap.min.css" />
+	<link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.2.0/css/bootstrap.min.css" />
 	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 	<style type="text/css">
 	#wrapper{
 		padding-top: 20px;
-		text-align: center;
+	}
+	#binds{
+		margin-top: 5px;
 	}
 	#contents button{
 		margin: 5px;
@@ -27,27 +29,111 @@
 	#stats .details.get{
 		display: block;
 	}
+	#bindList .unbind{
+		margin-left: 5px;
+	}
+	#bindList li{
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		overflow: hidden;
+	}
+	#lastkp .key{
+	}
 	</style>
 </head>
 <body>
-<div id="stats">En ligne: <a class="count">1</a><ul class="details"></ul></div>
-<div id="wrapper" class="container">
-	<div id="controls">
+<div id="stats">En ligne: <a href="#" class="count">1</a><ul class="details"></ul><span class="pull-right version"></span></div>
+<div id="wrapper">
+	<div id="controls" class="text-center">
 		<button class="btn btn-lg btn-info refresh">Actualiser</button>&nbsp;
 		<button class="btn btn-lg btn-danger stopall">Stop all</button>&nbsp;
 		<button class="btn btn-lg btn-info stats">Stats</button>&nbsp;
 	</div>
-	<div id="contents">
+	<div id="binds" class="text-center">
+	</div>
+	<div class="col-md-10">
+		<div id="contents" class="text-center">
+		</div>
+	</div>
+	<div class="col-md-2">
+		<div id="lastkp"><span class="key"><span class="text-muted">Pas de touche</span></span>&nbsp;<button class="attrib btn btn-default btn-xs pull-right" data-key="more"><span class="glyphicon glyphicon-plus"></span></button></div>
+		<br class="clearfix" />
+		<ul id="bindList" class="list-group"></ul>
 	</div>
 </div>
 
 <script type="text/javascript" src="./socket.io/socket.io.js"></script>
+<script type="text/javascript" src="./keyboard.js"></script>
 <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
-<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.1.1/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.2.0/js/bootstrap.min.js"></script>
+<script type="text/javascript" src="https://rawgit.com/leafo/sticky-kit/master/jquery.sticky-kit.min.js"></script>
 <script type="text/javascript">
+	for (var i = 97; i < 97+23; i++) {
+		var kar = String.fromCharCode(i).toUpperCase();
+		$('#binds').append($('<button />', {
+			'class': 'btn btn-sm btn-default bind-'+kar,
+			data: {
+				key: kar
+			},
+			text: kar
+		}).tooltip({container: 'body', placement: 'bottom'}));
+	};
+	$('#binds').append($('<button />', {
+		'class': 'btn btn-sm btn-default bind-more',
+		data: {
+			key: 'more'
+		},
+		text: '...'
+	}));
+	var bindMode = false;
+	var keybindings = {};
+	var bindData = {};
+	$('#binds, #lastkp').on('click', 'button', function(){
+		console.log('Bind clicked');
+		bindMode = true;
+		bindData = $(this).data('key').toUpperCase();
+	});
+	$('#bindList').on('click', '.unbind', function(e){
+		e.preventDefault();
+		console.log('Unbind clicked');
+		var bindData = $(this).data('key').toUpperCase();
+		console.log('Removing keybinding for ' + bindData);
+		if(keybindings[bindData] != null)
+			keybindings[bindData].clear();
+		$('#bindList .bind-'+bindData).remove();
+		$('#binds .bind-'+bindData).removeClass('active');
+		socket.emit('remove bind', {key: bindData});
+	});
+
+	var sounds = null;
 	var container = $('#contents');
 	var socket = io();
 	socket.on('getFiles', function (data){
+		loadSoundData(data);
+		$.getJSON('./getBindings.json', function (data){
+			loadBindData(data);
+		});
+	});
+	$.getJSON('./getSounds.json', function (data){
+		loadSoundData(data);
+		$.getJSON('./getBindings.json', function (data){
+			loadBindData(data);
+		});
+	});
+	function loadBindData(data){
+		console.log(data);
+		keybindings = {};
+		KeyboardJS.clear();
+		$('#bindList').empty();
+		for(var bindData in data){
+			var soundName = sounds[data[bindData]];
+			var key = bindData.substring(4).toUpperCase();
+			keybindings[key] = null;
+			addBindToList(key, soundName);
+		}
+	}
+	function loadSoundData(data){
+		sounds = data;
 		console.log(data);
 		container.empty();
 		var folders = {};
@@ -67,19 +153,68 @@
 				text: name,
 				'class': 'btn btn-lg btn-default '+i,
 				data: {
-					hash: i
+					hash: i,
+					file: data[i]
 				}
 			}).appendTo(folders[fname]);
 		};
-	})
+		$('#binds button').removeClass('active');
+		keybindings = {};
+		KeyboardJS.clear();
+	}
+	function addBindToList(key, sound){
+		sound = rmExt(sound);
+		$('#bindList').append($('<li />',{
+			'class': 'list-group-item bind-'+key,
+			text: key +' : ' + sound,
+			title: sound
+		}).prepend($('<button />', {
+			'class': 'unbind btn btn-danger btn-xs pull-right',
+			data: {
+				key: key.toUpperCase()
+			},
+			html: '<span class="glyphicon glyphicon-minus"></span>'
+		})));
+		var $e = $('#binds .bind-'+key).addClass('active').tooltip('hide').attr('title', sound.replace(/\//g,'\r\n')).tooltip('fixTitle').tooltip('show');
+		setTimeout(function (){
+			$e.tooltip('hide');
+		}, 1500);
+	}
 	container.on('click', 'button', function (e){
 		var $this = $(this);
-		$this.blur()
-		socket.emit('playSound', {hash: $(this).data('hash')}, function (data) {
-			$this.addClass('active');
-			console.log("Start Sound: " + data.name);
-		});
-	})
+		if(bindMode){
+			bindMode = false;
+			var soundHash = $this.data('hash');
+			var soundName = sounds[soundHash];
+
+			if(bindData == 'more'){
+				bindData = prompt("KEY_");
+				if(bindData == null)
+					return;
+			}
+			bindData = bindData.toUpperCase();
+
+			console.log('Binded ' + bindData + ' to ' + soundName);
+			if('undefined' != typeof keybindings[bindData]){
+				console.log('Removing old keybinding');
+				if(keybindings[bindData] != null)
+					keybindings[bindData].clear();
+				$('#bindList .bind-'+bindData).remove();
+			}
+			addBindToList(bindData, soundName);
+			keybindings[bindData] = KeyboardJS.on(bindData.toLowerCase(), function(){
+				$this.click();
+			});
+			socket.emit('add bind', {hash: soundHash, key: bindData});
+		}else{
+			socket.emit('playSound', {hash: $(this).data('hash')}, function (data) {
+				$this.addClass('active');
+				console.log("Start Sound: " + data.name);
+			});
+			
+		}
+		$this.blur();
+	});
 	$('#controls .stopall').click(function (e){
 		socket.emit('stopAll');
 		$('button', container).removeClass('active');
@@ -101,16 +236,30 @@
 		$('button.'+data.hash, container).addClass('active');
 	});
 	socket.on('PlayerStats', function (data){
+		console.log('PlayerStats', data);
 		$('#stats .count').text(data.count);
+		$('#stats .version').text(data.version);
 		$('#stats .details').empty();
 		for(var hash in data.data){
 			$('#stats .details').append($('<li />', { text: data.data[hash], title: hash }));
 		}
 	});
+	socket.on('connect_error', function (e){
+		console.log('connect_error', e);
+		$(document.body).css('backgroundColor', 'red');
+	});
+	socket.on('reconnect', function (e){
+		console.log('connect_error', e);
+		$(document.body).css('backgroundColor', '');
+	});
+	socket.on('key pressed', function (e){
+		$('#lastkp span.key').text(e.keyName);
+		$('#lastkp button.attrib').data('key', e.keyName.substring(4).toUpperCase());
+	})
 	$('#stats .count').click(function (e){
 		e.preventDefault();
 		$('#stats .details').toggleClass('get');
-	})
+	});
 
 	function rmExt(fileName){
 		return fileName.substring(0, fileName.lastIndexOf('.'));
